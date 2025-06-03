@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -18,6 +20,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _isLoading = false;
+
+  // Replace with your backend URL (use IP for physical devices)
+  final String apiUrl = "http://localhost:5000/api/auth/register"; // 10.0.2.2 = localhost in emulator
 
   @override
   Widget build(BuildContext context) {
@@ -28,10 +34,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFE6FFF3),
-              Color(0xFFF2FFFA),
-            ],
+            colors: [Color(0xFFE6FFF3), Color(0xFFF2FFFA)],
           ),
         ),
         child: SafeArea(
@@ -72,7 +75,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             "Register",
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                                fontSize: 22, fontWeight: FontWeight.bold),
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           const SizedBox(height: 10),
                           customField("Name", _nameController),
@@ -107,36 +112,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             });
                           }),
                           const SizedBox(height: 10),
-                          passwordField("Confirm Password",
-                              _confirmPasswordController, _obscureConfirmPassword, () {
-                            setState(() {
-                              _obscureConfirmPassword = !_obscureConfirmPassword;
-                            });
-                          }),
+                          passwordField(
+                            "Confirm Password",
+                            _confirmPasswordController,
+                            _obscureConfirmPassword,
+                            () {
+                              setState(() {
+                                _obscureConfirmPassword = !_obscureConfirmPassword;
+                              });
+                            },
+                          ),
                           const SizedBox(height: 20),
                           ElevatedButton(
-                            onPressed: () {
-                              if (_formKey.currentState!.validate()) {
-                                if (_passwordController.text !=
-                                    _confirmPasswordController.text) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text("Passwords do not match"),
-                                      backgroundColor: Colors.red,
-                                    ),
-                                  );
-                                } else {
-                                  // Show success message
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content:
-                                          Text("Successfully Registered!"),
-                                      backgroundColor: Colors.green,
-                                    ),
-                                  );
-                                }
-                              }
-                            },
+                            onPressed: _isLoading ? null : registerUser,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.pinkAccent,
                               shape: RoundedRectangleBorder(
@@ -144,8 +132,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               padding:
                                   const EdgeInsets.symmetric(vertical: 12),
                             ),
-                            child: const Text("Register",
-                                style: TextStyle(color: Colors.white)),
+                            child: _isLoading
+                                ? const CircularProgressIndicator(color: Colors.white)
+                                : const Text("Register",
+                                    style: TextStyle(color: Colors.white)),
                           ),
                           const SizedBox(height: 10),
                           Row(
@@ -190,6 +180,67 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> registerUser() async {
+    if (_formKey.currentState!.validate()) {
+      if (_passwordController.text != _confirmPasswordController.text) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Passwords do not match"),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      setState(() {
+        _isLoading = true;
+      });
+
+      try {
+        final response = await http.post(
+          Uri.parse(apiUrl),
+          headers: {"Content-Type": "application/json"},
+          body: jsonEncode({
+            "name": _nameController.text,
+            "phone": _phoneController.text,
+            "bloodGroup": _selectedBloodGroup,
+            "password": _passwordController.text,
+          }),
+        );
+
+        final json = jsonDecode(response.body);
+
+        if (response.statusCode == 200) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Successfully Registered!"),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pushNamed(context, '/login');
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(json["message"] ?? "Registration failed"),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      } finally {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   Widget customField(String label, TextEditingController controller,
